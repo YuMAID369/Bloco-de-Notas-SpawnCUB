@@ -1,0 +1,423 @@
+-- [[ SISTEMA DE BLOCO DE NOTAS - VERSÃO CORRIGIDA E ALINHADA (1000042002.png) ]]
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local UIS = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local PlayerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+local SAVE_FILE_NAME = "BlocoNotas_SaveData_V18.json"
+local FONTE_PADRAO = Enum.Font.LuckiestGuy
+local ICONE_SOL_ID = "rbxassetid://85337967115080"      
+local ICONE_LIXEIRA_ID = "rbxassetid://106515804542300"  
+local ICONE_FECHAR_ID = "rbxassetid://130753754985567"   
+
+-- Função Construtora Otimizada
+local function Create(className, parent, properties)
+    local obj = Instance.new(className)
+    for k, v in pairs(properties) do obj[k] = v end
+    obj.Parent = parent
+    return obj
+end
+
+local ScreenGui = Create("ScreenGui", PlayerGui, {Name = "BlocoNotas_FinalGui", ResetOnSpawn = false})
+
+-- --- ENGINE DE PERSISTÊNCIA DE DADOS ---
+local tabelaNotas = {}
+local indiceNotaAtiva = 0 -- Inicia em 0 para indicar nenhuma nota criada/ativa de primeira
+
+local function carregarDadosLocais()
+    local sucesso, conteudo = pcall(function()
+        if readfile then return readfile(SAVE_FILE_NAME) end
+    end)
+    if sucesso and conteudo then
+        pcall(function() tabelaNotas = HttpService:JSONDecode(conteudo) end)
+    end
+    -- Resetado para que a primeira execução venha totalmente vazia igual à imagem 2
+    if not tabelaNotas or #tabelaNotas == 0 then
+        tabelaNotas = {}
+        indiceNotaAtiva = 0
+    else
+        indiceNotaAtiva = 1
+    end
+end
+
+local function salvarDadosLocais()
+    if writefile and #tabelaNotas > 0 then
+        pcall(function()
+            local json = HttpService:JSONEncode(tabelaNotas)
+            writefile(SAVE_FILE_NAME, json)
+        end)
+    end
+end
+
+carregarDadosLocais()
+
+-- --- QUADRO PRINCIPAL COM CONTORNO BRANCO ---
+local MainFrame = Create("Frame", ScreenGui, {
+    Name = "MainFrame", 
+    AnchorPoint = Vector2.new(0.5, 0.5), 
+    Position = UDim2.new(0.5, 0, 0.5, 0), 
+    Size = UDim2.new(0, 450, 0, 340), 
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0), 
+    BorderSizePixel = 0, 
+    Active = true,
+    Visible = false
+})
+Create("UICorner", MainFrame, {CornerRadius = UDim.new(0, 10)})
+Create("UIStroke", MainFrame, {Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border})
+
+-- --- SISTEMA DE ARRASTO DA INTERFACE (MAINFRAME) ---
+local dragging, dragInput, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Botão Flutuante de Abertura Externo
+local OpenBtn = Create("ImageButton", ScreenGui, {
+    Name = "OpenBtn", 
+    Position = UDim2.new(0, 15, 0.45, 0), 
+    Size = UDim2.new(0, 55, 0, 55), 
+    BackgroundTransparency = 1, 
+    Image = "rbxassetid://102694682402864",
+    ScaleType = Enum.ScaleType.Fit,
+    Visible = true
+})
+
+-- Sistema de Arrasto do Botão Open
+local dragToggle, buttonDragStart, buttonStartPos
+OpenBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragToggle, buttonDragStart, buttonStartPos = true, input.Position, OpenBtn.Position
+        if OpenBtn.AnchorPoint ~= Vector2.new(0, 0) then
+            OpenBtn.AnchorPoint = Vector2.new(0, 0)
+            OpenBtn.Position = UDim2.new(0, OpenBtn.AbsolutePosition.X, 0, OpenBtn.AbsolutePosition.Y)
+        end
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if dragToggle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - buttonDragStart
+        OpenBtn.Position = UDim2.new(buttonStartPos.X.Scale, buttonStartPos.X.Offset + delta.X, buttonStartPos.Y.Scale, buttonStartPos.Y.Offset + delta.Y)
+    end
+end)
+UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragToggle = false end end)
+
+-- --- CABEÇALHO ---
+local Title = Create("TextLabel", MainFrame, {
+    Size = UDim2.new(1, 0, 0, 45), 
+    Position = UDim2.new(0, 0, 0, 8), 
+    BackgroundTransparency = 1, 
+    Text = "BLOCO DE NOTAS", 
+    TextColor3 = Color3.fromRGB(255,255,255), 
+    TextSize = 26, 
+    Font = FONTE_PADRAO,
+    TextXAlignment = Enum.TextXAlignment.Center, 
+    TextYAlignment = Enum.TextYAlignment.Center
+})
+
+-- Divisória Branca Grossa
+Create("Frame", MainFrame, {
+    Size = UDim2.new(1, -24, 0, 7),
+    Position = UDim2.new(0, 12, 0, 52),
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BorderSizePixel = 0
+})
+
+-- Botão Quadrado Customizado [X] Superior Direito
+local BotaoXSuperior = Create("ImageButton", MainFrame, {
+    Size = UDim2.new(0, 36, 0, 36),
+    Position = UDim2.new(1, -48, 0, 10),
+    BackgroundTransparency = 1,
+    Image = ICONE_FECHAR_ID,
+    ScaleType = Enum.ScaleType.Fit,
+    ZIndex = 5
+})
+
+-- --- PAINEL LATERAL ESQUERDO ---
+local PainelLateral = Create("Frame", MainFrame, {
+    Size = UDim2.new(0, 125, 1, -145),
+    Position = UDim2.new(0, 14, 0, 75),
+    BackgroundTransparency = 1
+})
+
+local LabelSecoes = Create("TextLabel", PainelLateral, {
+    Size = UDim2.new(1, -25, 0, 25), 
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "SEÇÕES", 
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 18, 
+    Font = FONTE_PADRAO,
+    TextXAlignment = Enum.TextXAlignment.Center, 
+    TextYAlignment = Enum.TextYAlignment.Center
+})
+
+local BotaoAdicionar = Create("TextButton", PainelLateral, {
+    Size = UDim2.new(0, 22, 0, 22),
+    Position = UDim2.new(1, -22, 0, 2),
+    BackgroundColor3 = Color3.fromRGB(45, 45, 45),
+    Text = "+",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 16,
+    Font = FONTE_PADRAO
+})
+Create("UICorner", BotaoAdicionar, {CornerRadius = UDim.new(0, 4)})
+
+local ListaSecoesContainer = Create("ScrollingFrame", PainelLateral, {
+    Size = UDim2.new(1, 0, 1, -30),
+    Position = UDim2.new(0, 0, 0, 32),
+    BackgroundTransparency = 1,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    ScrollBarThickness = 0
+})
+local LayoutLista = Create("UIListLayout", ListaSecoesContainer, {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8)})
+
+-- --- ÁREA DE TEXTO DIREITA ---
+local AreaEscrita = Create("Frame", MainFrame, {
+    Size = UDim2.new(1, -172, 1, -145),
+    Position = UDim2.new(0, 158, 0, 75),
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+    BorderSizePixel = 0
+})
+Create("UIStroke", AreaEscrita, {Color = Color3.fromRGB(255, 255, 255), Thickness = 1})
+
+-- Ícone do Sol centralizado
+local SolBackground = Create("ImageLabel", AreaEscrita, {
+    Name = "SolBackground",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 5),
+    Size = UDim2.new(0, 130, 0, 130),
+    BackgroundTransparency = 1,
+    Image = ICONE_SOL_ID,
+    ImageColor3 = Color3.fromRGB(255, 255, 255),
+    ImageTransparency = 0.88, 
+    ScaleType = Enum.ScaleType.Fit,
+    ZIndex = 1
+})
+
+-- Input do Título da Nota Ativa
+local InputTitulo = Create("TextBox", AreaEscrita, {
+    Size = UDim2.new(1, -12, 0, 30),
+    Position = UDim2.new(0, 8, 0, 4),
+    BackgroundTransparency = 1,
+    Text = "",
+    PlaceholderText = "TÍTULO...",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    PlaceholderColor3 = Color3.fromRGB(140, 140, 140),
+    Font = FONTE_PADRAO,
+    TextSize = 15,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ClearTextOnFocus = false,
+    ZIndex = 2
+})
+
+-- Divisória Fina Interna
+Create("Frame", AreaEscrita, {
+    Size = UDim2.new(1, -16, 0, 1),
+    Position = UDim2.new(0, 8, 0, 34),
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BorderSizePixel = 0,
+    ZIndex = 2
+})
+
+-- Área de Conteúdo da Nota
+local InputConteudo = Create("TextBox", AreaEscrita, {
+    Size = UDim2.new(1, -16, 1, -44),
+    Position = UDim2.new(0, 8, 0, 40),
+    BackgroundTransparency = 1,
+    Text = "",
+    PlaceholderText = "Conteúdo...",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    PlaceholderColor3 = Color3.fromRGB(120, 120, 120),
+    Font = Enum.Font.SourceSansBold,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    MultiLine = true,
+    TextWrapped = true,
+    ClearTextOnFocus = false,
+    ZIndex = 2
+})
+
+-- =============================================================================
+-- BOTÕES REPOSICIONADOS E ELEVADOS (SUBIRAM ALGUNS PIXELS)
+-- =============================================================================
+
+-- Container da Lixeira e Texto Excluir (Posicionado em -58 para subir mais)
+local FrameExcluirContainer = Create("Frame", MainFrame, {
+    Size = UDim2.new(0, 150, 0, 35),
+    Position = UDim2.new(0, 14, 1, -58),
+    BackgroundTransparency = 1
+})
+
+local IconeLixeira = Create("ImageLabel", FrameExcluirContainer, {
+    Size = UDim2.new(0, 32, 0, 32),
+    Position = UDim2.new(0, 0, 0.5, -16),
+    BackgroundTransparency = 1,
+    Image = ICONE_LIXEIRA_ID,
+    ScaleType = Enum.ScaleType.Fit
+})
+
+local BotaoExcluir = Create("TextButton", FrameExcluirContainer, {
+    Size = UDim2.new(1, -38, 1, 0),
+    Position = UDim2.new(0, 38, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "EXCLUIR SEÇÃO",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 13,
+    Font = FONTE_PADRAO,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Center
+})
+
+-- Botão Fechar Centralizado (Subiu para -58)
+local BotaoCloseCentral = Create("TextButton", MainFrame, {
+    Size = UDim2.new(0, 115, 0, 36),
+    Position = UDim2.new(0.5, -57, 1, -58),
+    BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+    Text = "FECHAR UI",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 15,
+    Font = FONTE_PADRAO
+})
+Create("UICorner", BotaoCloseCentral, {CornerRadius = UDim.new(0, 6)})
+Create("UIStroke", BotaoCloseCentral, {Color = Color3.fromRGB(120, 120, 120), Thickness = 1})
+
+-- Botão Salvar Direita (Subiu para -58)
+local BotaoSalvar = Create("TextButton", MainFrame, {
+    Size = UDim2.new(0, 85, 0, 36),
+    Position = UDim2.new(1, -99, 1, -58),
+    BackgroundColor3 = Color3.fromRGB(35, 35, 35),
+    Text = "SALVAR",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    TextSize = 14,
+    Font = FONTE_PADRAO
+})
+Create("UICorner", BotaoSalvar, {CornerRadius = UDim.new(0, 6)})
+Create("UIStroke", BotaoSalvar, {Color = Color3.fromRGB(120, 120, 120), Thickness = 1})
+
+-- --- MECÂNICAS OPERACIONAIS ---
+
+local function atualizarCamposDeEdicao()
+    local nota = tabelaNotas[indiceNotaAtiva]
+    if nota then
+        InputTitulo.Text = nota.titulo
+        InputConteudo.Text = nota.conteudo
+        InputTitulo.Interactable = true
+        InputConteudo.Interactable = true
+    else
+        InputTitulo.Text = ""
+        -- Texto padrão idêntico ao solicitado da imagem 2 para telas zeradas
+        InputConteudo.Text = "Crie uma nova seção clicando no botão '+'."
+        InputTitulo.Interactable = false
+        InputConteudo.Interactable = false
+    end
+end
+
+local function renderizarListaLateral()
+    for _, child in ipairs(ListaSecoesContainer:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    
+    for index, nota in ipairs(tabelaNotas) do
+        local botaoNota = Create("TextButton", ListaSecoesContainer, {
+            Name = "Nota_" .. index,
+            Size = UDim2.new(1, -5, 0, 36), 
+            BackgroundColor3 = (index == indiceNotaAtiva) and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(28, 28, 28),
+            Text = nota.titulo,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            Font = FONTE_PADRAO,
+            TextSize = 12,
+            TextWrapped = true
+        })
+        Create("UICorner", botaoNota, {CornerRadius = UDim.new(0, 6)})
+        
+        botaoNota.MouseButton1Click:Connect(function()
+            if tabelaNotas[indiceNotaAtiva] then
+                tabelaNotas[indiceNotaAtiva].titulo = InputTitulo.Text
+                tabelaNotas[indiceNotaAtiva].conteudo = InputConteudo.Text
+            end
+            indiceNotaAtiva = index
+            renderizarListaLateral()
+            atualizarCamposDeEdicao()
+        end)
+    end
+    ListaSecoesContainer.CanvasSize = UDim2.new(0, 0, 0, LayoutLista.AbsoluteContentSize.Y)
+end
+
+InputTitulo:GetPropertyChangedSignal("Text"):Connect(function()
+    if tabelaNotas[indiceNotaAtiva] then
+        tabelaNotas[indiceNotaAtiva].titulo = InputTitulo.Text
+        local btn = ListaSecoesContainer:FindFirstChild("Nota_" .. indiceNotaAtiva)
+        if btn then btn.Text = InputTitulo.Text end
+    end
+end)
+
+InputConteudo:GetPropertyChangedSignal("Text"):Connect(function()
+    if tabelaNotas[indiceNotaAtiva] then
+        tabelaNotas[indiceNotaAtiva].conteudo = InputConteudo.Text
+    end
+end)
+
+BotaoAdicionar.MouseButton1Click:Connect(function()
+    table.insert(tabelaNotas, {titulo = "NOVA NOTA", conteudo = ""})
+    indiceNotaAtiva = #tabelaNotas
+    renderizarListaLateral()
+    atualizarCamposDeEdicao()
+end)
+
+BotaoExcluir.MouseButton1Click:Connect(function()
+    if #tabelaNotas > 0 and indiceNotaAtiva > 0 then
+        table.remove(tabelaNotas, indiceNotaAtiva)
+        if indiceNotaAtiva > #tabelaNotas then indiceNotaAtiva = #tabelaNotas end
+        if indiceNotaAtiva == 0 and #tabelaNotas > 0 then indiceNotaAtiva = 1 end
+        renderizarListaLateral()
+        atualizarCamposDeEdicao()
+    end
+end)
+
+local aberto = false
+local function alternarPainel()
+    aberto = not aberto
+    if aberto then
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 450, 0, 340)}):Play()
+    else
+        local tween = TweenService:Create(MainFrame, TweenInfo.new(0.15, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 0)})
+        tween:Play()
+        tween.Completed:Connect(function() if not aberto then MainFrame.Visible = false end end)
+    end
+end
+
+local function destruirInterface()
+    ScreenGui:Destroy()
+end
+
+OpenBtn.MouseButton1Click:Connect(alternarPainel)
+BotaoSalvar.MouseButton1Click:Connect(salvarDadosLocais)
+
+BotaoXSuperior.MouseButton1Click:Connect(destruirInterface)
+BotaoCloseCentral.MouseButton1Click:Connect(destruirInterface)
+
+renderizarListaLateral()
+atualizarCamposDeEdicao()
